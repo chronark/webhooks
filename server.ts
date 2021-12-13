@@ -53,8 +53,9 @@ async function work(req: Request) {
   const targetUrl = `${targetHost}${url.pathname}`;
 
   const deduplicationId = req.headers.get("wh-deduplication-id") ?? undefined;
-  const debounceWindow =
-    Number.parseInt(req.headers.get("wh-debounce-window") ?? "0") || undefined;
+  const debounceWindow = Number.parseInt(
+    req.headers.get("wh-debounce-window") ?? "0"
+  );
 
   const headers: Record<string, string> = {};
   for (const [k, v] of req.headers) {
@@ -89,45 +90,16 @@ async function work(req: Request) {
       attempts: [],
       webhook,
     });
+  }
 
-    console.log(`forwarding webhook: ${webhook.id}`);
-
-    await fetch(webhook.url, webhook.request)
-      .then(async (res) => {
-        if (res.ok) {
-          console.log("Webhook delivered", webhook.id);
-        } else {
-          console.warn("Unable to deliver webhook", webhook.id);
-          await redis.set(webhook.id, {
-            debounceWindow,
-            originalHash: webhook.hash,
-            attempts: [
-              {
-                time: Date.now(),
-                response: { code: res.status, message: await res.text() },
-              },
-            ],
-            webhook,
-          });
-        }
-      })
-      .catch(async (err) => {
-        console.error("Unable to deliver webhook", webhook.id, err);
-        await redis.set(webhook.id, {
-          debounceWindow,
-          originalHash: webhook.hash,
-          attempts: [
-            {
-              time: Date.now(),
-              response: { code: 500, message: err.message },
-            },
-          ],
-          webhook,
-        });
-      });
+  if (!storedWebhook || !debounceWindow) {
+    await fetch(webhook.url, webhook.request).then(() => {
+      console.log("Webhook delivered", webhook.id, webhook.request.body);
+    });
   }
 
   if (debounceWindow) {
+    console.log({ debounceWindow });
     setTimeout(async () => {
       const scheduledWebhook = await redis.get(webhook.id);
       if (!scheduledWebhook) {
@@ -142,7 +114,11 @@ async function work(req: Request) {
           .then(async (res) => {
             if (res.ok) {
               await redis.delete(scheduledWebhook.webhook.id);
-              console.log("Webhook delivered", webhook.id);
+              console.log(
+                "Webhook delivered after debounce window",
+                webhook.id,
+                webhook.request.body
+              );
             } else {
               console.warn("Unable to deliver webhook", webhook.id);
               await redis.set(webhook.id, {
@@ -171,7 +147,7 @@ async function work(req: Request) {
             });
           });
       }
-    }, debounceWindow);
+    }, debounceWindow * 1000);
   }
 
   return { id: webhook.id };
