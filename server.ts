@@ -43,14 +43,10 @@ type ScheduledWebhook = {
 };
 
 async function work(req: Request) {
-  const url = new URL(req.url);
-
-  const targetHost = req.headers.get("wh-target-host");
-  if (!targetHost) {
+  const targetUrl = req.headers.get("wh-target-url");
+  if (!targetUrl) {
     throw new Error("wh-target-host header is missing");
   }
-
-  const targetUrl = `${targetHost}${url.pathname}`;
 
   const deduplicationId = req.headers.get("wh-deduplication-id") ?? undefined;
   const debounceWindow = Number.parseInt(
