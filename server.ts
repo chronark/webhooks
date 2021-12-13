@@ -171,7 +171,7 @@ async function work(req: Request) {
             });
           });
       }
-    }, 20000);
+    }, debounceWindow);
   }
 
   return { id: webhook.id };
