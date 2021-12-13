@@ -128,50 +128,50 @@ async function work(req: Request) {
   }
 
   if (debounceWindow) {
-    await new Promise((res) => setTimeout(res, debounceWindow));
+    setTimeout(async () => {
+      const scheduledWebhook = await redis.get(webhook.id);
+      if (!scheduledWebhook) {
+        return;
+      }
 
-    const scheduledWebhook = await redis.get(webhook.id);
-    if (!scheduledWebhook) {
-      return;
-    }
-
-    if (webhook.hash !== scheduledWebhook.originalHash) {
-      await fetch(
-        scheduledWebhook.webhook.url,
-        scheduledWebhook.webhook.request
-      )
-        .then(async (res) => {
-          if (res.ok) {
-            await redis.delete(scheduledWebhook.webhook.id);
-            console.log("Webhook delivered", webhook.id);
-          } else {
-            console.warn("Unable to deliver webhook", webhook.id);
+      if (webhook.hash !== scheduledWebhook.originalHash) {
+        await fetch(
+          scheduledWebhook.webhook.url,
+          scheduledWebhook.webhook.request
+        )
+          .then(async (res) => {
+            if (res.ok) {
+              await redis.delete(scheduledWebhook.webhook.id);
+              console.log("Webhook delivered", webhook.id);
+            } else {
+              console.warn("Unable to deliver webhook", webhook.id);
+              await redis.set(webhook.id, {
+                ...scheduledWebhook,
+                attempts: [
+                  ...scheduledWebhook.attempts,
+                  {
+                    time: Date.now(),
+                    response: { code: res.status, message: await res.text() },
+                  },
+                ],
+              });
+            }
+          })
+          .catch(async (err) => {
+            console.error("Unable to deliver webhook", webhook.id, err);
             await redis.set(webhook.id, {
               ...scheduledWebhook,
               attempts: [
                 ...scheduledWebhook.attempts,
                 {
                   time: Date.now(),
-                  response: { code: res.status, message: await res.text() },
+                  response: { code: 500, message: err.message },
                 },
               ],
             });
-          }
-        })
-        .catch(async (err) => {
-          console.error("Unable to deliver webhook", webhook.id, err);
-          await redis.set(webhook.id, {
-            ...scheduledWebhook,
-            attempts: [
-              ...scheduledWebhook.attempts,
-              {
-                time: Date.now(),
-                response: { code: 500, message: err.message },
-              },
-            ],
           });
-        });
-    }
+      }
+    }, debounceWindow);
   }
 
   return { id: webhook.id };

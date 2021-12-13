@@ -1,4 +1,4 @@
-import { createHash } from "https://deno.land/std@0.117.0/hash/mod.ts";
+import { createHash } from "./deps.ts";
 
 export type Webhook = {
   id: string;

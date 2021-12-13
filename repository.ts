@@ -1,5 +1,4 @@
-import * as redis from "https://esm.sh/@upstash/redis";
-
+import {redis } from "./deps.ts"
 export interface Repository<T> {
   get: (key: string) => Promise<T | null>;
   set: (key: string, value: T) => Promise<void>;
